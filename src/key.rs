@@ -1,73 +1,83 @@
-use ramp::Int;
 use rand;
-
-use ramp::RandomInt;
+use crate::uint::Uint;
+use std::io::Write;
 
 pub struct PrivKey {
-    n: Int,
-    d: Int,
+    n: Uint,
+    d: Uint,
 }
 
 pub struct PubKey {
-    n: Int,
-    e: Int,
+    n: Uint,
+    e: Uint,
 }
 
 impl PrivKey {
     pub fn print(&self) {
-        println!("n: {:X}", self.n);
-        println!("d: {:X}", self.d);
+        println!("n: {}", self.n.to_hex());
+        println!("d: {}", self.d.to_hex());
     }
 
     pub fn from_str(n: &str, d: &str) -> Result<PrivKey, ramp::int::ParseIntError> {
+        /*
         Ok(PrivKey {
             n: Int::from_str_radix(n, 16)?,
             d: Int::from_str_radix(d, 16)?,
         })
+        */
+        Ok(PrivKey {
+            n: Uint::zero(),
+            d: Uint::zero(),
+        })
     }
 
     pub fn decrypt(&self, c: &str) -> Result<String, ramp::int::ParseIntError> {
+        /*
         let cint = Int::from_str_radix(c, 16)?;
         let m = cint.pow_mod(&self.d, &self.n);
         Ok(format!("{:X}", m))
+        */
+        return Ok(String::new());
     }
 }
 
 impl PubKey {
     pub fn print(&self) {
-        println!("n: {:X}", self.n);
-        println!("e: {:X}", self.e);
+        println!("n: {}", self.n.to_hex());
+        println!("e: {}", self.e.to_hex());
     }
 
     pub fn from_str(n: &str, e: &str) -> Result<PubKey, ramp::int::ParseIntError> {
         Ok(PubKey {
-            n: Int::from_str_radix(n, 16)?,
-            e: Int::from_str_radix(e, 16)?,
+            n: Uint::zero(),
+            e: Uint::zero(),
         })
     }
 
     pub fn encrypt(&self, m: &str) -> Result<String, ramp::int::ParseIntError> {
-
+        /*
         let mint = Int::from_str_radix(m, 16)?;
         let c = mint.pow_mod(&self.e, &self.n);
         Ok(format!("{:X}", c))
+        */
+        return Ok(String::new());
     }
 }
 
-fn modinv(m: Int, n: Int) -> Int {
-    let mut s = (Int::from(0), Int::from(1));
+fn modinv(m: Uint, n: Uint) -> Uint {
+    let mut s = (Uint::zero(), Uint::from(1));
     let mut r = (n.clone(), m);
 
-    while r.0 != 0 {
+    while r.0 != Uint::zero() {
         let q = r.1.clone() / r.0.clone();
 
-        r = (r.1 - q.clone() * r.0.clone(), r.0);
-        s = (s.1 - q * s.0.clone(), s.0);
+        r = (r.1.mod_sub(q.clone() * r.0.clone(), &n), r.0);
+        s = (s.1.mod_sub(q * s.0.clone(), &n), s.0);
     }
 
     let mut result = s.1 % n.clone();
-    while result < 0 {
-        result += n.clone();
+    while result < Uint::zero() {
+        result = result + n.clone();
     }
 
     result
@@ -77,9 +87,9 @@ pub fn keygen() -> (PrivKey, PubKey) {
     let p = rand_prime(1024, 6);
     let q = rand_prime(1024, 6);
 
-    let e = Int::from(65537);
+    let e = Uint::from(65537);
     let n = p.clone() * q.clone();
-    let phi_n: Int = (p-1) * (q-1);
+    let phi_n: Uint = (p-Uint::from(1)) * (q-Uint::from(1));
     let d = modinv(e.clone(), phi_n); 
     
     let priv_key = PrivKey {
@@ -113,40 +123,45 @@ const SMALL_PRIMES: [u64; 169] = [3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 4
                             919, 929, 937, 941, 947, 953, 967, 971, 977, 983,
                             991, 997, 1009, 1013];
 
-fn rand_prime(digits: usize, t: usize) -> Int {
+fn rand_prime(digits: usize, t: usize) -> Uint {
     let mut counter = 0;
     'gen: loop {
-        let mut rng = rand::thread_rng();
-        let mut num = rng.gen_uint(digits-1);
+        // let mut num = rng.gen_uint(digits-1);
+        let mut num = Uint::rand(digits / 64);
         num.set_bit(0, true);
-        num.set_bit((digits-1) as u32, true);
+        num.set_bit(digits-1, true);
 
         for small_prime in SMALL_PRIMES.iter() {
-            if num.clone() % *small_prime == 0 {
+            if num.clone() % Uint::from(*small_prime) == Uint::zero() {
                 continue 'gen;
             }
         }
 
-        let dec: ramp::Int = num.clone() - 1;
-        let k = dec.trailing_zeros() as usize;
+        let dec: Uint = num.clone() - Uint::from(1);
+        let mut k = 0;
+        while !dec.get_bit(k) {
+            k += 1;
+        }
         let d = dec.clone() >> k;
-        let two = ramp::Int::from(2);
 
         'outer: for _ in 0..t {
             let a = loop {
-                let r = rng.gen_uint_below(&dec);
-                if r < 2 { continue; }
+                let r = Uint::rand(digits/64);
+                if r < Uint::from(2) { continue; }
+                if r >= dec { continue; }
                 break r;
             };
 
-            let mut y = a.pow_mod(&d, &num);
+            let mut y = a.mod_pow(&d, &num);
 
-            if y == 1 || y == dec {
+            if y == Uint::from(1) || y == dec {
                 continue
             }
 
             for _ in 0..k {
-                y = y.pow_mod(&two, &num);
+                y = y.mod_pow(&Uint::from(2), &num);
+                // println!("{:?}", dec.clone() - y.clone());
+                // println!("{:?}", y.clone() - dec.clone());
                 if y == dec {
                     continue 'outer;
                 }
@@ -155,6 +170,7 @@ fn rand_prime(digits: usize, t: usize) -> Int {
             counter += 1;
             if counter % 10 == 0 {
                 print!(".");
+                std::io::stdout().flush().unwrap();
             }
             continue 'gen;
         }

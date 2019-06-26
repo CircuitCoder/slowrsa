@@ -1,26 +1,47 @@
 use std::ops::*;
+use rand::Rng;
 use std::cmp::*;
 
 /// Arbitrary precision unsigned integer
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Uint {
+pub struct Uint {
     digits: Vec<u64>,
 }
 
 impl Uint {
-    fn from(n: u64) -> Self {
+    pub fn from(n: u64) -> Self {
         Uint {
             digits: vec![n],
         }
     }
 
-    fn zero() -> Uint {
+    pub fn zero() -> Uint {
         Uint {
             digits: Vec::new(),
         }
     }
 
-    fn trim(mut self) -> Self {
+    pub fn rand(units: usize) -> Uint {
+        let mut rng = rand::thread_rng();
+        let mut v: Vec<u64> = Vec::new();
+        v.resize_with(units, || rng.gen());
+
+        Uint {
+            digits: v,
+        }
+    }
+
+    pub fn to_hex(&self) -> String {
+        let mut result = String::new();
+
+        for i in self.digits.iter() {
+            result = format!("{:02X}", *i) + &result;
+        }
+
+        result
+    }
+
+    pub fn trim(mut self) -> Self {
         while self.digits.len() > 0 && self.digits[self.digits.len()-1] == 0 {
             self.digits.pop();
         }
@@ -28,7 +49,7 @@ impl Uint {
         self
     }
 
-    fn shift_add(mut self, other: Self, shift: usize) -> Self {
+    pub fn shift_add(mut self, other: Self, shift: usize) -> Self {
         // println!("SHIFT_ADD: {:?} + {:?} << {}", self, other, shift);
         let mut carry: u128 = 0;
         let mut i: usize = 0;
@@ -46,7 +67,7 @@ impl Uint {
             }
 
             let result = self.digits[i+shift] as u128 + other.digits[i] as u128 + carry;
-            carry = result >> 64;
+            carry = result.checked_shr(64).unwrap_or(0);
             self.digits[i+shift] = result as u64;
 
             i += 1;
@@ -55,39 +76,38 @@ impl Uint {
         self.trim()
     }
 
-    fn get_bit(&self, bit: usize) -> bool {
+    pub fn get_bit(&self, bit: usize) -> bool {
         let outer = bit / 64;
         let inner = bit % 64;
         if outer >= self.digits.len() {
             false
         } else {
-            self.digits[outer].overflowing_shr(inner as u32).0 & 1 != 0
+            self.digits[outer].checked_shr(inner as u32).unwrap_or(0) & 1 != 0
         }
     }
 
-    fn set_bit(&mut self, bit: usize, cont: bool) {
+    pub fn set_bit(&mut self, bit: usize, cont: bool) {
         let outer = bit / 64;
         let inner = bit % 64;
         if outer >= self.digits.len() {
             self.digits.resize_with(outer+1, Default::default);
         }
 
-        self.digits[outer] &= !(1u64 << inner);
+        self.digits[outer] &= !(1u64.checked_shl(inner as u32).unwrap_or(0));
         if cont {
-            self.digits[outer] |= 1u64 << inner;
+            self.digits[outer] |= 1u64.checked_shl(inner as u32).unwrap_or(0);
         }
     }
 
-    fn divrem(&self, other: &Uint) -> (Uint, Uint) {
+    pub fn divrem(&self, other: &Uint) -> (Uint, Uint) {
         if self < other {
-            return (Uint::zero(), other.clone());
+            return (Uint::zero(), self.clone());
         }
 
         let mut reminder = Uint::zero();
         let mut quotient = Uint::zero();
 
-        for i in (0..self.digits.len()*64).rev() {
-            println!("DIVINNER: {}, {:?} - {:?}", i, reminder, quotient);
+        for i in (0..self.top_bit()).rev() {
             reminder = reminder << 1;
             reminder.set_bit(0, self.get_bit(i));
             
@@ -96,11 +116,19 @@ impl Uint {
                 quotient.set_bit(i, true);
             }
         }
+        // if other.digits.len() > 1 {
+        //     println!("===");
+        //     println!("0x{}", self.to_hex());
+        //     println!("0x{}", other.to_hex());
+        //     println!("0x{}", quotient.to_hex());
+        //     println!("0x{}", reminder.to_hex());
+        // }
+        // println!("DIVINNER: {:?}\n / {:?}\n = {:?}\n - {:?}", self, other, quotient, reminder);
 
-        (quotient, reminder)
+        (quotient.trim().clone(), reminder.trim().clone())
     }
 
-    fn mod_sub(mut self, mut other: Uint, m: &Uint) -> Uint {
+    pub fn mod_sub(mut self, mut other: Uint, m: &Uint) -> Uint {
         other = other.divrem(m).1;
 
         if self < other {
@@ -111,9 +139,13 @@ impl Uint {
         self.divrem(m).1
     }
 
-    fn mod_pow(mut self, p: &Uint, m: &Uint) -> Uint {
-        let mut result = self.clone();
-        for i in 0..p.top_bit() {
+    pub fn mod_pow(mut self, p: &Uint, m: &Uint) -> Uint {
+        // println!("=====");
+        // println!("{}", self.to_hex());
+        // println!("{}", p.to_hex());
+        // println!("{}", m.to_hex());
+        let mut result = Uint::from(1);
+        for i in (0..p.top_bit()).rev() {
             result = result.clone() * result;
             if p.get_bit(i) {
                 result = result * self.clone()
@@ -121,11 +153,11 @@ impl Uint {
 
             result = result.divrem(m).1;
         }
-
+        // println!("{}", result.to_hex());
         result
     }
 
-    fn top_bit(&self) -> usize {
+    pub fn top_bit(&self) -> usize {
         self.digits.len() * 64 - self.digits[self.digits.len() - 1].leading_zeros() as usize
     }
 }
@@ -138,7 +170,13 @@ impl Add for Uint {
             return other + self;
         }
 
-        self.shift_add(other, 0)
+        let original = self.clone();
+
+        let result = self.shift_add(other.clone(), 0);
+
+        // println!("0x{} * 0x{} - 0x{}", original.to_hex(), other.to_hex(), result.to_hex());
+
+        result
     }
 }
 
@@ -185,11 +223,14 @@ impl Mul<u64> for Uint {
     type Output = Self;
 
     fn mul(mut self, other: u64) -> Self {
+        // println!("=====");
+        let original = self.clone();
+
         let mut carry: u128 = 0;
         let mut i: usize = 0;
 
         loop {
-            if i != 0 && carry == 0 {
+            if i >= self.digits.len() && carry == 0 {
                 break;
             }
 
@@ -198,13 +239,16 @@ impl Mul<u64> for Uint {
             }
 
             let result = self.digits[i] as u128 * other as u128 + carry;
-            carry = result >> 64;
+            carry = result.checked_shr(64).unwrap_or(0);
             self.digits[i] = result as u64;
 
             i += 1;
         }
 
-        println!("INTER: {:?}", self);
+        // println!("0x{} * 0x{:X} - 0x{}", original.to_hex(), other, self.to_hex());
+        // println!("{:?}", original);
+        // println!("{:X}", other);
+        // println!("{:?}", self);
         self.trim()
     }
 }
@@ -213,15 +257,17 @@ impl Mul for Uint {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        if self.digits.len() < other.digits.len() {
-            return other * self;
-        }
+        // println!("=====");
+        // println!("{}", self.to_hex());
+        // println!("{}", other.to_hex());
 
         let mut result = Uint::zero();
 
         for i in 0..other.digits.len() {
             result = result.shift_add(self.clone() * other.digits[i], i);
         }
+
+        // println!("{}", result.to_hex());
 
         result.trim()
     }
@@ -239,9 +285,35 @@ impl Shl<usize> for Uint {
         result.resize_with(outer + 1 + self.digits.len(), Default::default);
 
         for i in 0..self.digits.len() {
-            result[i + outer] |= self.digits[i].overflowing_shl(inner as u32).0;
+            result[i + outer] |= self.digits[i].checked_shl(inner as u32).unwrap_or(0);
             if inner > 0 {
-                result[i + outer + 1] |= self.digits[i].overflowing_shr((64 - inner) as u32).0;
+                result[i + outer + 1] |= self.digits[i].checked_shr((64 - inner) as u32).unwrap_or(0);
+            }
+        }
+
+        (Uint {
+            digits: result,
+        }).trim()
+    }
+}
+
+impl Shr<usize> for Uint {
+    type Output = Self;
+
+    fn shr(self, other: usize) -> Self {
+        // Move first
+        let outer = other / 64;
+        let inner = other % 64;
+
+        let mut result = Vec::with_capacity(outer + 1 + self.digits.len());
+        result.resize_with(outer + 1 + self.digits.len(), Default::default);
+
+        for i in 0..self.digits.len() {
+            if i >= outer {
+                result[i - outer] |= self.digits[i].checked_shr(inner as u32).unwrap_or(0);
+            }
+            if inner > 0 && i >= outer + 1 {
+                result[i - outer - 1] |= self.digits[i].checked_shl((64 - inner) as u32).unwrap_or(0);
             }
         }
 
@@ -301,7 +373,7 @@ fn test_mul() {
     let a = Uint::from(100000000000000000u64);
     let b = Uint::from(200000000000000000u64);
     
-    println!("MUL: {:?}", a*b);
+    println!("MUL: {}", (a*b).to_hex());
 }
 
 #[test]
@@ -347,9 +419,9 @@ fn test_divrem() {
 
 #[test]
 fn test_pow() {
-    let a = Uint::from(100);
-    let b = Uint::from(17);
-    let c = Uint::from(48);
+    let a = Uint::from(109324580);
+    let b = Uint::from(16);
+    let c = Uint::from(4023108);
     
     println!("MODPOW: {:?}", a.mod_pow(&b, &c));
 }
