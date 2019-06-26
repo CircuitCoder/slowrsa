@@ -18,26 +18,17 @@ impl PrivKey {
         println!("d: {}", self.d.to_hex());
     }
 
-    pub fn from_str(n: &str, d: &str) -> Result<PrivKey, ramp::int::ParseIntError> {
-        /*
+    pub fn from_str(n: &str, d: &str) -> Result<PrivKey, ()> {
         Ok(PrivKey {
-            n: Int::from_str_radix(n, 16)?,
-            d: Int::from_str_radix(d, 16)?,
-        })
-        */
-        Ok(PrivKey {
-            n: Uint::zero(),
-            d: Uint::zero(),
+            n: Uint::from_str(n),
+            d: Uint::from_str(d),
         })
     }
 
-    pub fn decrypt(&self, c: &str) -> Result<String, ramp::int::ParseIntError> {
-        /*
-        let cint = Int::from_str_radix(c, 16)?;
-        let m = cint.pow_mod(&self.d, &self.n);
-        Ok(format!("{:X}", m))
-        */
-        return Ok(String::new());
+    pub fn decrypt(&self, c: &str) -> Result<String, ()> {
+        let cint = Uint::from_str(c);
+        let m = cint.mod_pow(&self.d, &self.n);
+        Ok(format!("{}", m.to_hex()))
     }
 }
 
@@ -47,20 +38,17 @@ impl PubKey {
         println!("e: {}", self.e.to_hex());
     }
 
-    pub fn from_str(n: &str, e: &str) -> Result<PubKey, ramp::int::ParseIntError> {
+    pub fn from_str(n: &str, e: &str) -> Result<PubKey, ()> {
         Ok(PubKey {
-            n: Uint::zero(),
-            e: Uint::zero(),
+            n: Uint::from_str(n),
+            e: Uint::from_str(e),
         })
     }
 
-    pub fn encrypt(&self, m: &str) -> Result<String, ramp::int::ParseIntError> {
-        /*
-        let mint = Int::from_str_radix(m, 16)?;
-        let c = mint.pow_mod(&self.e, &self.n);
-        Ok(format!("{:X}", c))
-        */
-        return Ok(String::new());
+    pub fn encrypt(&self, m: &str) -> Result<String, ()> {
+        let mint = Uint::from_str(m);
+        let c = mint.mod_pow(&self.e, &self.n);
+        Ok(format!("{}", c.to_hex()))
     }
 }
 

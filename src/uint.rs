@@ -21,6 +21,29 @@ impl Uint {
         }
     }
 
+    pub fn from_str(s: &str) -> Uint {
+        let mut digits = Vec::new();
+
+        let mut ptr = s.len();
+        while ptr > 0 {
+            let seg = if ptr >= 16 {
+                &s[ptr-16..ptr]
+            } else {
+                &s[0..ptr]
+            };
+
+            digits.push(u64::from_str_radix(seg, 16).unwrap());
+
+            if ptr <= 16 {
+                break;
+            }
+
+            ptr -= 16;
+        }
+
+        Uint { digits }
+    }
+
     pub fn rand(units: usize) -> Uint {
         let mut rng = rand::thread_rng();
         let mut v: Vec<u64> = Vec::new();
@@ -35,7 +58,7 @@ impl Uint {
         let mut result = String::new();
 
         for i in self.digits.iter() {
-            result = format!("{:02X}", *i) + &result;
+            result = format!("{:016X}", *i) + &result;
         }
 
         result
