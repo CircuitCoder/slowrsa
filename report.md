@@ -62,7 +62,7 @@ $$
 
 ```cpp
 uint32_t fast_pow(uint32_t base, uint32_t p, uint32_t m) {
-    if(p == 0) return base;
+    if(p == 0) return 1;
     uint64_t cur = fast_pow(base, p>>1, m);
     cur = (cur * cur) % m;
     if base & 1 {
