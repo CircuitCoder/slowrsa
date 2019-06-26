@@ -76,8 +76,6 @@ fn modinv(m: Int, n: Int) -> Int {
 pub fn keygen() -> (PrivKey, PubKey) {
     let p = rand_prime(1024, 6);
     let q = rand_prime(1024, 6);
-    println!("{}", p);
-    println!("{}", q);
 
     let e = Int::from(65537);
     let n = p.clone() * q.clone();
@@ -156,11 +154,12 @@ fn rand_prime(digits: usize, t: usize) -> Int {
 
             counter += 1;
             if counter % 10 == 0 {
-                println!("{}", counter);
+                print!(".");
             }
             continue 'gen;
         }
 
+        println!("{}", counter);
         break num;
     }
 }
